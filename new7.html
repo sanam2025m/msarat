@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>تقرير مسارات مواسم</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <style>
+  :root{
+    --brand:#4d2c12; --ink:#000; --muted:#ccc; --paper:#fff;
+    --field:#e9f3ff;           /* أزرق فاتح لصناديق الإدخال */
+    --field-hover:#f2f8ff;
+    --field-ring:rgba(0,114,255,0.18);
+    --navy:#001f3f;            /* أزرق كحلي لعناوين الجداول */
+    --page-padding:20mm; --rows-per-page:40;
+    --table-top-offset:28mm;   /* مقدار الهامش العلوي أعلى الجداول ابتداءً من الصفحة الثالثة */
+  }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:var(--paper); color:var(--ink);
+    font-family:'Cairo',sans-serif;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .app{min-height:100vh; display:flex; flex-direction:column;}
+  .toolbar{
+    position:sticky; top:0; z-index:1000;
+    display:flex; justify-content:center; gap:12px; padding:12px;
+    background:linear-gradient(to bottom, rgba(0,0,0,.04), rgba(0,0,0,0));
+    backdrop-filter:blur(4px);
+  }
+  .toolbar button{
+    padding:10px 20px; font-size:16px; background:var(--brand); color:#fff;
+    border:0; border-radius:10px; cursor:pointer;
+  }
+  .content{width:min(1200px,100%); margin:0 auto; padding:16px; box-sizing:border-box;}
+  .card{background:#fff; border:1px solid var(--muted); border-radius:14px; box-shadow:0 4px 20px rgba(0,0,0,.04); padding:18px; margin-bottom:16px;}
+
+  /* شعار الشاشة: وسطي وأكبر */
+  .header{
+    display:flex; justify-content:center; align-items:center;
+    border-bottom:2px solid #eee; padding-bottom:10px; margin-bottom:10px;
+  }
+  .header img{ height:140px; }
+
+  h1,h2{text-align:center; color:var(--brand); margin:8px 0;}
+  .input-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px 16px; align-items:end;}
+  .input-line label{font-weight:700; display:block; margin-bottom:4px;}
+
+  /* عناصر الإدخال العامة (أزرق فاتح) */
+  input[type="text"], input[type="date"], select{
+    width:100%; border:1px solid #cfe4ff; background:var(--field);
+    font-size:16px; padding:8px 10px; border-radius:10px; box-sizing:border-box;
+    font-family:'Cairo',sans-serif; transition:all .2s ease-in-out;
+  }
+  input[type="text"]:hover, input[type="date"]:hover, select:hover{
+    border-color:#9ec6ff; background-color:var(--field-hover);
+  }
+  input[type="text"]:focus, input[type="date"]:focus, select:focus{
+    border-color:#4d9bff; background-color:#fff; outline:none;
+    box-shadow:0 0 0 3px var(--field-ring);
+  }
+  select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 6 5-6' fill='none' stroke='%23555' stroke-width='2'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-size:12px 8px; background-position:left 10px center; padding-left:28px;
+  }
+  
+  /* الحقول العامة: أضفنا textarea */
+input[type="text"],
+input[type="date"],
+select,
+textarea{
+  width:100%;
+  border:1px solid #cfe4ff;     /* أزرق فاتح */
+  background:var(--field);       /* أزرق فاتح من المتغيّر */
+  font-size:16px;
+  padding:8px 10px;
+  border-radius:10px;
+  box-sizing:border-box;
+  font-family:'Cairo',sans-serif;
+  transition:all .2s ease-in-out;
+  resize: vertical;              /* سحب رأسي فقط */
+}
+
+/* تأثير hover: أضفنا textarea */
+input[type="text"]:hover,
+input[type="date"]:hover,
+select:hover,
+textarea:hover{
+  border-color:#9ec6ff;
+  background-color:var(--field-hover);
+}
+
+/* تأثير focus: أضفنا textarea */
+input[type="text"]:focus,
+input[type="date"]:focus,
+select:focus,
+textarea:focus{
+  border-color:#4d9bff;
+  background-color:#fff;
+  outline:none;
+  box-shadow:0 0 0 3px var(--field-ring);
+}
+
+
+  /* جدول الشاشة الافتراضي */
+  table{width:100%; border-collapse:collapse; table-layout:fixed;}
+  th,td{border:1px solid #ddd; padding:6px; text-align:center; font-size:12px; word-wrap:break-word; word-break:break-word; white-space:pre-wrap;}
+  .muted{color:#666;}
+  .print-only{display:none;}
+
+  /* ===== جدول الحضور (من المرجع) ===== */
+  .sanam-table thead th{
+    vertical-align:middle; font-weight:700; font-size:16px;
+    background:var(--navy); color:#fff;     /* رأس الجدول أزرق كحلي والنص أبيض */
+  }
+  .sanam-table td, .sanam-table th{ border-color:#edf0f4 !important; }
+  .input-wrap{ position:relative; }
+  .input-wrap .form-control, .input-wrap .form-select{
+    border-radius:14px; border:1px solid #cfe4ff; background:var(--field); /* مدخلات الجدول أزرق فاتح */
+    padding-inline-start:44px; padding-inline-end:12px; height:44px;
+  }
+  .input-wrap .form-select{ padding-inline-start:12px; }
+  .input-wrap .form-control:focus, .input-wrap .form-select:focus{
+    border-color:#4d9bff; box-shadow:0 0 0 4px var(--field-ring);
+    background:#fff;
+  }
+  .icon{
+    position:absolute; inset-inline-start:12px; top:50%; transform:translateY(-50%);
+    width:22px; height:22px; opacity:.65; pointer-events:none; background-repeat:no-repeat; background-size:22px 22px;
+  }
+  .icon.clock{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='%23393E46' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><polyline points='12 6 12 12 16 14'/></svg>");
+  }
+  .icon.calendar{
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="%23393E46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>');
+  }
+  .total-hours{ font-weight:600; direction:rtl; }
+  .status-hudur{ background-color:#d4edda !important; }
+  .status-insiraf{ background-color:#d1ecf1 !important; }
+  .status-ghiyab{ background-color:#f8d7da !important; }
+
+  /* مسافة إضافية تحت العنوان — دفع الجدول للأسفل في واجهة الشاشة */
+  .attendance-section{ margin-top:24px; }
+  .attendance-section .table-responsive{ margin-top:12px; }
+  
+  /* ===== Compact, aligned inputs inside table cells ===== */
+:root{
+  /* tweak these two to taste */
+  --input-h: 40px;     /* unified input height (was 44px) */
+  --cell-vpad: 4px;    /* vertical padding inside th/td (was 6px) */
+  --icon-w: 22px;
+  --icon-gap: 12px;
+}
+
+/* smaller cells so rows aren't huge */
+.sanam-table th,
+.sanam-table td{
+  padding: var(--cell-vpad) 8px !important;
+  vertical-align: middle; /* keep content centered vertically */
+}
+
+/* normalize all controls (text/date/time/select) */
+.sanam-table .input-wrap{
+  position: relative;
+  width: 100%;
+}
+.sanam-table .input-wrap .form-control,
+.sanam-table .input-wrap .form-select{
+  height: var(--input-h);
+  font-size: 14px;
+  padding-inline-start: calc(var(--icon-w) + var(--icon-gap));
+  padding-inline-end: 12px;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+/* make <select> text vertically centered the same as inputs */
+.sanam-table .input-wrap .form-select{
+  line-height: calc(var(--input-h) - 2px); /* compensate borders on some browsers */
+}
+
+/* unify our leading icons position/size */
+.sanam-table .icon{
+  inset-inline-start: var(--icon-gap);
+  width: var(--icon-w);
+  height: var(--icon-w);
+}
+
+/* hide native date/time affordances to avoid double icons & misalignment (WebKit) */
+.sanam-table input[type="date"]::-webkit-calendar-picker-indicator,
+.sanam-table input[type="time"]::-webkit-calendar-picker-indicator{
+  display: none;
+}
+.sanam-table input[type="time"]::-webkit-inner-spin-button,
+.sanam-table input[type="time"]::-webkit-clear-button{
+  display: none;
+}
+
+/* Firefox trims */
+.sanam-table input[type="date"]::-moz-focus-inner,
+.sanam-table input[type="time"]::-moz-focus-inner{
+  border: 0;
+  padding: 0;
+}
+
+/* optional: if you still see slight vertical jitter, lock line-height */
+.sanam-table .input-wrap .form-control{
+  line-height: normal; /* keep native centering for inputs */
+}
+
+
+  /* ===================== الطباعة A4 ===================== */
+  @page { size:A4; margin:0; }
+  @media print{
+    html,body{ margin:0!important; width:210mm; height:291mm; overflow:visible; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+    /* إزالة أي هيدر من الصفحات بعد الغلاف */
+    #printRoot > .print-page:nth-child(n+2) .header{ display:none !important; }
+
+    /* خلفية الغلاف: من assets/cover-page1.png */
+    .cover-page::before{
+      content:""; position:absolute; inset:0; height:calc(100% - 0.2mm); width:calc(100% - 0.2mm);
+      background:#fdf4e8 url('assets/cover-page1.png') no-repeat center/210mm 288mm; pointer-events:none;
+    }
+
+    /* خلفية الصفحة الثانية */
+    #printRoot > .print-page:nth-child(2){
+      background: url('assets/2nd.png') no-repeat center / cover !important;
+    }
+
+    /* خلفية من الصفحة الثالثة فصاعدًا + هامش علوي إضافي للجداول */
+    #printRoot > .print-page:nth-child(n+3){
+      background: url('assets/3rd.png') no-repeat center / cover !important;
+    }
+    #printRoot > .print-page:nth-child(n+3) .page-content{
+      padding-top: calc(var(--page-padding) + var(--table-top-offset)) !important;
+      background: transparent !important;
+    }
+
+    /* رأس الجدول في الطباعة: كحلي وأبيض */
+    .attendance-table thead th{
+      background:var(--navy) !important; color:#fff !important;
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+
+    .toolbar, .card.screen-only, .screen-only{ display:none !important; }
+    .print-only{ display:block !important; }
+
+    .print-page{
+      display:block; position:relative; box-sizing:border-box;
+      width:210mm; height:291mm; margin:0 auto; padding:0;
+      break-after:auto; page-break-after:auto; overflow:hidden; background:#fff;
+    }
+    .print-page:nth-child(n+3){ break-before:page; page-break-before:always; }
+    .print-page .page-content{ padding:var(--page-padding); box-sizing:border-box; width:100%; max-width:100%; overflow-x:hidden; }
+    table{ width:100%; border-collapse:collapse; table-layout:fixed; page-break-inside:auto; }
+    thead{ display:table-header-group !important; }
+    tfoot{ display:table-footer-group !important; }
+    tbody{ display:table-row-group; }
+    th,td{ font-size:12px; border:1px solid #ccc; word-break:break-word; white-space:pre-wrap; page-break-inside:avoid; }
+    img{ max-width:100%; height:auto; }
+
+    .cover-page, .second-page{ position:relative; height:291mm; overflow:hidden; background:none !important; }
+  }
+
+  /* معاينة للصفحة الثانية (اختياري على الشاشة) */
+  .print-page.second-page{
+    background-image:url('assets/2nd.png');
+    background-size:cover; background-repeat:no-repeat; background-position:center;
+  }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar screen-only">
+      <button id="printBtn">🖨️ طباعة التقرير PDF</button>
+    </div>
+
+    <div class="content">
+      <section class="card screen-only">
+        <div class="header">
+          <img src="assets/logo_sanam.png" alt="logo" />
+        </div>
+        <h1>تقرير تأمين خدمات النظافة</h1>
+        <div class="input-grid">
+          <div class="input-line"><label>من</label><input type="date" id="from" /></div>
+          <div class="input-line"><label>إلى</label><input type="date" id="to" /></div>
+          <div class="input-line"><label>عدد الصفحات (تقديري)</label><input type="text" id="pages" /></div>
+          <div class="input-line"><label>اسم العميل</label><input type="text" id="company" /></div>
+        </div>
+      </section>
+
+      <section class="card screen-only">
+        <h2>نص الخطاب</h2>
+        <p class="muted">استخدم {from} و {to} داخل النص الرئيسي ليتم استبدالهما تلقائيًا عند الطباعة.</p>
+
+        <label class="input-line" style="display:block; margin-bottom:8px;"><strong>النص الرئيسي</strong></label>
+        <textarea id="letterBody" rows="8"
+          style="width:100%; padding:10px; border:1px solid #cfe4ff; border-radius:10px; background:var(--field); font-size:14px; line-height:1.8;">
+السلام عليكم ورحمة الله وبركاته،
+نقدّم لسادتكم هذا التقرير الحضور والانصراف للفترة من {from} إلى {to}، والمتعلق بتأمين الخدمات النظافة في موقع الاهلة مول
+، وفقًا للعقد المبرم مع شركتكم الموقرة.
+يتضمن التقرير ملخصًا تسجيل الحضور والانصراف ، وتقييم الأداء، والملاحظات المسجلة خلال الفترة، إلى جانب التوصيات والإجراءات المقترحة لتعزيز مستوى الأمن والسلامة بالموقع.
+نسعد بالتعاون المستمر معكم، ونعمل دائمًا على تقديم أعلى مستويات الكفاءة والجاهزية لخدمة منشآتكم.
+راجين أن ينال هذا التقرير رضاكم، ومستعدون لتقديم أي توضيحات إضافية حال تطلب الأمر.
+        </textarea>
+
+        <div class="input-line" style="margin-top:10px;">
+          <label><strong>سطر الشكر (سطر واحد)</strong></label>
+          <input type="text" id="thanksLine" value="تفضلوا بقبول فائق الاحترام والتقدير" />
+        </div>
+
+        <div class="input-line" style="margin-top:10px;">
+          <label><strong>تذييل الخطاب</strong> <small class="muted">(كل سطر في سطر منفصل)</small></label>
+          <textarea id="footerBlock" rows="3">ادارة المتابعة لقسم الصيانة والتشغيل</textarea>
+        </div>
+      </section>
+
+      <!-- ===== استيراد/تصدير الحضور (ملف XLSX فقط) ===== -->
+      <section class="card screen-only" id="importControls">
+        <h2 class="mb-3">استيراد / تصدير الحضور</h2>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-6 mt-2">
+            <label class="form-label mb-1">ملف Excel (.xlsx)</label>
+            <input id="xlsxFile" type="file" accept=".xlsx" class="form-control" />
+          </div>
+          <div class="col-md-2 mt-2 d-grid">
+            <button class="btn btn-outline-secondary" id="btnImportXLSX">استيراد من الملف</button>
+          </div>
+          <div class="col-md-4 mt-2 d-grid">
+            <button class="btn btn-success" id="btnExportXLSX">📊 تصدير Excel (XLSX)</button>
+          </div>
+        </div>
+        <small class="text-muted d-block mt-2">
+          يتوقع النظام الأعمدة: الموظف، التاريخ، الدخول، الخروج، الحالة (عناوين الصف الأول). إذا لم تُكتشف العناوين سيُستخدم الترتيب الافتراضي (0..4).
+        </small>
+      </section>
+
+      <!-- ===== جدول الحضور ===== -->
+      <section class="card screen-only attendance-section">
+        <h2>ملخص الحضور والانصراف</h2>
+        <div class="table-responsive">
+          <table id="attendanceTable" class="table table-bordered text-center align-middle mb-0 sanam-table attendance-table">
+            <thead>
+              <tr>
+                <th>الموظف</th>
+                <th>التاريخ</th>
+                <th>دخول</th>
+                <th>خروج</th>
+                <th>مجموع الساعات</th>
+                <th>الحالة</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="input-wrap">
+                    <input type="text" class="form-control emp-input" placeholder="اسم الموظف" />
+                  </div>
+                </td>
+                <td>
+                  <div class="input-wrap">
+                    <span class="icon calendar" aria-hidden="true"></span>
+                    <input type="date" class="form-control date-input" />
+                  </div>
+                </td>
+                <td>
+                  <div class="input-wrap">
+                    <span class="icon clock" aria-hidden="true"></span>
+                    <input type="time" class="form-control time-in" />
+                  </div>
+                </td>
+                <td>
+                  <div class="input-wrap">
+                    <span class="icon clock" aria-hidden="true"></span>
+                    <input type="time" class="form-control time-out" />
+                  </div>
+                </td>
+                <td>
+                  <div class="input-wrap">
+                    <input type="text" class="form-control total-hours" readonly />
+                  </div>
+                </td>
+                <td>
+                  <div class="input-wrap">
+                    <select class="form-select status-select">
+                      <option value="حضور">حضور</option>
+                      <option value="انصراف">انصراف</option>
+                      <option value="غياب">غياب</option>
+                    </select>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="4" class="text-end">مجموع ساعات جميع الموظفين:</td>
+                <td>
+                  <div class="input-wrap">
+                    <input type="text" class="form-control" id="grandTotal" readonly />
+                  </div>
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-between mt-3">
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" id="btnAddRow">➕ إضافة صف</button>
+            <button class="btn btn-outline-secondary" id="btnClear">🧹 مسح البيانات</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- DOM الخاص بالطباعة -->
+      <div id="printRoot" class="print-only"></div>
+    </div>
+  </div>
+
+  <script>
+  /* ===================== إعدادات عامة ===================== */
+  const fields=["date","from","to","subject","pages","company","site","coverText","letterBody","thanksLine","footerBlock"];
+
+  // حِفظ/استرجاع الحقول
+  window.addEventListener('load', ()=>{
+    fields.forEach(id=>{
+      const el=document.getElementById(id);
+      const saved=localStorage.getItem('report_'+id);
+      if(saved && el) el.value=saved;
+      if(el){
+        el.addEventListener('input', ()=>{
+          localStorage.setItem('report_'+id, el.value);
+          updateDocumentTitleWithDateRange();
+          syncPrintFields();
+        });
+        if(id==='from' || id==='to'){
+          el.addEventListener('change', ()=>{
+            updateDocumentTitleWithDateRange();
+            syncPrintFields();
+          });
+        }
+      }
+    });
+    initAttendanceTable(); // تفعيل مستمعي جدول الحضور
+    updateDocumentTitleWithDateRange();
+    syncPrintFields();
+  });
+
+  function updateDocumentTitleWithDateRange(){
+    const f=document.getElementById('from')?.value || '';
+    const t=document.getElementById('to')?.value || '';
+    const s='تقرير أمني';
+    document.title=(f&&t)?`${s} - من ${f} إلى ${t}`:s;
+  }
+
+  /* ===================== جدول الحضور (من المرجع) ===================== */
+  function setDefaultDates() {
+    let today = new Date().toISOString().split('T')[0];
+    document.querySelectorAll(".date-input").forEach(input => { input.value = today; });
+  }
+  function addRow() {
+    const tbody = document.querySelector("#attendanceTable tbody");
+    const newRow = tbody.rows[0].cloneNode(true);
+    newRow.querySelectorAll("input").forEach(i => i.value = "");
+    newRow.querySelectorAll("select").forEach(s => s.value = "حضور");
+    tbody.appendChild(newRow);
+    setDefaultDates();
+    addListeners();
+  }
+  function clearTable() {
+    const tbody = document.querySelector("#attendanceTable tbody");
+    const first = tbody.rows[0];
+    tbody.innerHTML = "";
+    tbody.appendChild(first);
+    first.querySelectorAll("input").forEach(i => i.value = "");
+    first.querySelectorAll("select").forEach(s => s.value = "حضور");
+    setDefaultDates();
+    addListeners();
+    updateGrandTotal();
+  }
+  function calculateHours(row) {
+    const timeIn = row.querySelector(".time-in").value;
+    const timeOut = row.querySelector(".time-out").value;
+    const totalField = row.querySelector(".total-hours");
+    if (timeIn && timeOut) {
+      let inDate = new Date("1970-01-01T" + timeIn + ":00");
+      let outDate = new Date("1970-01-01T" + timeOut + ":00");
+      if (outDate < inDate) outDate.setDate(outDate.getDate() + 1);
+      let diffMs = outDate - inDate;
+      let diffHrs = Math.floor(diffMs / 1000 / 60 / 60);
+      let diffMins = Math.floor((diffMs / 1000 / 60) % 60);
+      totalField.value = diffHrs + " ساعة " + diffMins + " دقيقة";
+    } else {
+      totalField.value = "";
+    }
+    updateGrandTotal();
+  }
+  function parseHours(text) {
+    if (!text) return 0;
+    const m = text.match(/(\d+)\s*ساعة\s*(\d+)\s*دقيقة/);
+    if (!m) return 0;
+    return (parseInt(m[1]) * 60) + parseInt(m[2]);
+  }
+  function formatHM(totalMinutes) {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return h + " ساعة " + m + " دقيقة";
+  }
+  function updateGrandTotal() {
+    let total = 0;
+    document.querySelectorAll("#attendanceTable tbody tr").forEach(row => {
+      total += parseHours(row.querySelector(".total-hours").value || "");
+    });
+    document.getElementById("grandTotal").value = formatHM(total);
+  }
+  function applyStatusColor(row, value) {
+    row.classList.remove("status-hudur", "status-insiraf", "status-ghiyab");
+    if (value === "حضور") row.classList.add("status-hudur");
+    if (value === "انصراف") row.classList.add("status-insiraf");
+    if (value === "غياب") row.classList.add("status-ghiyab");
+  }
+  function addListeners() {
+    document.querySelectorAll(".time-in, .time-out").forEach(input => {
+      input.removeEventListener("change", input._calcListener || (()=>{}));
+      input._calcListener = function () { calculateHours(this.closest("tr")); };
+      input.addEventListener("change", input._calcListener);
+    });
+    document.querySelectorAll(".status-select").forEach(select => {
+      select.removeEventListener("change", select._statusListener || (()=>{}));
+      select._statusListener = function () { applyStatusColor(this.closest("tr"), this.value); };
+      select.addEventListener("change", select._statusListener);
+      select.dispatchEvent(new Event("change"));
+    });
+  }
+  function initAttendanceTable(){
+    setDefaultDates();
+    addListeners();
+    updateGrandTotal();
+    document.getElementById('btnAddRow').addEventListener('click', addRow);
+    document.getElementById('btnClear').addEventListener('click', clearTable);
+    document.getElementById('btnImportXLSX').addEventListener('click', importFromXLSXFile);
+    document.getElementById('btnExportXLSX').addEventListener('click', exportXLSX);
+  }
+
+  /* ===================== استيراد من ملف XLSX فقط ===================== */
+  function findIndex(header, candidates){
+    const norm = s => s.toLowerCase().replace(/\s+/g,'').replace(/[ـ_]/g,'');
+    const H = header.map(norm);
+    for(const cand of candidates){
+      const c = norm(cand);
+      const i = H.indexOf(c);
+      if(i>=0) return i;
+    }
+    for(let i=0;i<H.length;i++){
+      if(candidates.some(c => H[i].includes(norm(c)))) return i;
+    }
+    return -1;
+  }
+  function safeCell(row, idx){ return (idx<0||idx==null)?'':(row[idx]||'').toString(); }
+
+  async function importFromXLSXFile(){
+    const inp = document.getElementById('xlsxFile');
+    if(!inp.files || !inp.files[0]){ alert('اختر ملف .xlsx أولاً'); return; }
+    const file = inp.files[0];
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const wsName = wb.SheetNames[0];
+    const ws = wb.Sheets[wsName];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    if(!json.length){ alert('الملف فارغ'); return; }
+
+    const header = json[0].map(x => (x||'').toString().trim());
+    const idx = {
+      emp: findIndex(header, ['الموظف','اسم الموظف','employee','emp','name']),
+      date: findIndex(header, ['التاريخ','date']),
+      in: findIndex(header, ['دخول','وقت الدخول','in','time in','checkin']),
+      out: findIndex(header, ['خروج','وقت الخروج','out','time out','checkout']),
+      status: findIndex(header, ['الحالة','status'])
+    };
+    if(idx.emp<0 && header.length>=1) idx.emp = 0;
+    if(idx.date<0 && header.length>=2) idx.date = 1;
+    if(idx.in<0 && header.length>=3) idx.in = 2;
+    if(idx.out<0 && header.length>=4) idx.out = 3;
+    if(idx.status<0 && header.length>=5) idx.status = 4;
+
+    clearTable();
+    const tbody = document.querySelector("#attendanceTable tbody");
+    for(let r=1; r<json.length; r++){
+      const row = json[r];
+      if(!row || row.every(c => (c||'').toString().trim()==='')) continue;
+      if(r>1) addRow();
+      const tr = tbody.rows[tbody.rows.length-1];
+      setVal(tr, '.emp-input',  safeCell(row, idx.emp));
+      setVal(tr, '.date-input', normalizeDateForInput(safeCell(row, idx.date)));
+      setVal(tr, '.time-in',    normalizeTimeForInput(safeCell(row, idx.in)));
+      setVal(tr, '.time-out',   normalizeTimeForInput(safeCell(row, idx.out)));
+      const st = (safeCell(row, idx.status) || '').trim();
+      const sel = tr.querySelector('.status-select');
+      if(['حضور','انصراف','غياب'].includes(st)) sel.value = st;
+      else if (/absent|غياب/i.test(st)) sel.value = 'غياب';
+      else if (/out|انصراف/i.test(st)) sel.value = 'انصراف';
+      else sel.value = 'حضور';
+      calculateHours(tr);
+      applyStatusColor(tr, sel.value);
+    }
+    updateGrandTotal();
+    alert('تم الاستيراد من ملف Excel بنجاح.');
+  }
+
+  function setVal(tr, sel, val){ const el = tr.querySelector(sel); if(el) el.value = val || ''; }
+
+  function normalizeDateForInput(v){
+    v = (v||'').trim();
+    if(!v) return '';
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    let m = v.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+    if(m){ const [_, d, mo, y] = m; return `${y}-${mo}-${d}`; }
+    m = v.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
+    if(m){ const [_, y, mo, d] = m; return `${y}-${mo}-${d}`; }
+    m = v.match(/\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{2}[\/\-]\d{2}[\/\-]\d{4}/);
+    if(m) return normalizeDateForInput(m[0]);
+    return '';
+  }
+  function normalizeTimeForInput(v){
+    v = (v||'').trim();
+    if(!v) return '';
+    let m = v.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if(m){ let h = m[1].padStart(2,'0'); return `${h}:${m[2]}`; }
+    m = v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if(m){ let h = parseInt(m[1],10); const mins = m[2]; const pm = /PM/i.test(m[3]);
+      if(h===12 && !pm) h = 0; else if(pm && h<12) h += 12; return `${String(h).padStart(2,'0')}:${mins}`; }
+    m = v.match(/^(\d{3,4})$/);
+    if(m){ const s = m[1].padStart(4,'0'); return `${s.slice(0,2)}:${s.slice(2)}`; }
+    m = v.match(/(\d{1,2}):(\d{2})/);
+    if(m){ let h = m[1].padStart(2,'0'); return `${h}:${m[2]}`; }
+    return '';
+  }
+
+  function exportXLSX(){
+    const rows = [["الموظف","التاريخ","دخول","خروج","مجموع الساعات","الحالة"]];
+    document.querySelectorAll("#attendanceTable tbody tr").forEach(tr=>{
+      rows.push([
+        tr.querySelector(".emp-input")?.value || "",
+        tr.querySelector(".date-input")?.value || "",
+        tr.querySelector(".time-in")?.value || "",
+        tr.querySelector(".time-out")?.value || "",
+        tr.querySelector(".total-hours")?.value || "",
+        tr.querySelector(".status-select")?.value || ""
+      ]);
+    });
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, "attendance.xlsx");
+  }
+
+  /* ===================== الحقول المطبوعة ===================== */
+  function syncPrintFields(){
+    ['from','to','pages','company'].forEach(id=>{
+      const el=document.getElementById(id);
+      const span=document.getElementById('print_'+id);
+      if(span) span.textContent=el?.value||'';
+    });
+    const out = document.getElementById('print_letterBlock');
+    const bodyEl   = document.getElementById('letterBody');
+    const thanksEl = document.getElementById('thanksLine');
+    const footEl   = document.getElementById('footerBlock');
+    if(!out) return;
+    const fromVal=document.getElementById('from')?.value||'____';
+    const toVal  =document.getElementById('to')?.value  ||'____';
+    const bodyRaw = (bodyEl?.value || '').replaceAll('{from}', fromVal).replaceAll('{to}', toVal);
+    const toParas = (txt, align, bold=false) => (txt || '')
+      .split(/\r?\n/).map(line=>{
+        const t=line.trim();
+        if(!t) return `<p dir="rtl">&nbsp;</p>`;
+        const alignCss  = align ? `text-align:${align};` : '';
+        const weightCss = bold ? 'font-weight:700;' : '';
+        return `<p dir="rtl" style="${alignCss}${weightCss}">${t}</p>`;
+      }).join('');
+    let html = '';
+    html += toParas(bodyRaw, '');
+    const thanks = (thanksEl?.value || '').trim();
+    if(thanks){ html += `<p dir="rtl" style="text-align:center;">${thanks}</p>`; }
+    const footer = footEl?.value || '';
+    if(footer){ html += toParas(footer, 'left', true); }
+    out.innerHTML = html;
+  }
+
+  /* ===================== بناء صفحات الطباعة ===================== */
+  function buildPrintPages(_unused, attendanceValues){
+    const root=document.getElementById('printRoot');
+    if(!root) return;
+    root.innerHTML='';
+
+    // (1) الغلاف (خلفية من CSS: assets/cover-page1.png)
+    const cover=document.createElement('section');
+    cover.className='print-page cover-page';
+    const cText=document.createElement('div');
+    Object.assign(cText.style,{ position:'absolute', bottom:'90px', left:'30px', color:'#fff', fontSize:'16px', fontWeight:'700', whiteSpace:'pre-wrap', width:'300px' });
+    cText.textContent=document.getElementById('coverText')?.value||'';
+    cover.appendChild(cText);
+    root.appendChild(cover);
+
+    // (2) الصفحة الثانية (خلفية assets/2nd.png)
+    const info=document.createElement('section');
+    info.className='print-page second-page';
+    info.innerHTML=`
+      <div class="page-content">
+        <h1>تقرير قسم الصيانة والتشغيل</h1>
+        <h2>الحضور والانصراف</h2>
+        <div style="font-size:14px;line-height:1.8">
+          <p><strong>الفترة:</strong> من <span id="print_from"></span> إلى <span id="print_to"></span></p>
+          <p><strong>عدد الصفحات:</strong> <span id="print_pages"></span></p>
+          <p><strong>اسم العميل:</strong> <span id="print_company"></span></p>
+          <div id="print_letterBlock" style="margin-top:12px"></div>
+        </div>
+      </div>`;
+    root.appendChild(info);
+
+    // (3) صفحات الجداول (خلفية assets/3rd.png من CSS)
+    appendPaginatedTableMeasured(root, attendanceValues, 'ملخص الحضور والانصراف', 20, 'attendance-table');
+  }
+
+  function appendPaginatedTableMeasured(root, values, title, extraBottomMm=20, className){
+    const pages = paginateValuesMeasured(values, title, extraBottomMm);
+    if (!pages.length) {
+      const empty = document.createElement('section');
+      empty.className = 'print-page table-page';
+      empty.innerHTML = `<div class="page-content"><h2>${title}</h2><p>لا توجد بيانات.</p></div>`;
+      root.appendChild(empty);
+      return;
+    }
+    pages.forEach((vals, idx) => {
+      const sec = document.createElement('section');
+      sec.className = 'print-page table-page';
+      const tableHTML = buildTableHTML(vals, className);
+      sec.innerHTML = `<div class="page-content">${idx === 0 ? ('<h2>' + title + '</h2>') : ''}${tableHTML}</div>`;
+      root.appendChild(sec);
+    });
+  }
+
+  function paginateValuesMeasured(allValues, title, extraBottomMm = 20){
+    if (!allValues || !allValues.length) return [];
+    const headers = allValues[0], rows = allValues.slice(1);
+    const chunks = []; let i = 0; let firstPage = true;
+    while (i < rows.length) {
+      const fit = measureRowsFit(headers, rows.slice(i), firstPage, title, extraBottomMm);
+      const rowsThisPage = Math.max(1, fit);
+      chunks.push([headers, ...rows.slice(i, i + rowsThisPage)]);
+      i += rowsThisPage; firstPage = false;
+    }
+    return chunks;
+  }
+
+  // === النسخة التي تراعي الهامش العلوي الإضافي للصفحات 3+ ===
+  function measureRowsFit(headers, candidateRows, includeTitle, title, extraBottomMm){
+    // حاوية قياس بنفس أبعاد صفحة A4
+    const page = document.createElement('div');
+    page.style.cssText = `
+      position:absolute; left:-10000px; top:0;
+      width:210mm; height:297mm; box-sizing:border-box;
+      background:#fff; overflow:hidden; font-family:'Cairo', sans-serif;
+    `;
+
+    // قراءة المتغيرات من CSS
+    const pagePaddingStr = getComputedStyle(document.documentElement)
+      .getPropertyValue('--page-padding').trim() || '20mm';
+    const topOffsetStr = getComputedStyle(document.documentElement)
+      .getPropertyValue('--table-top-offset').trim() || '0mm';
+
+    const padMm  = parseFloat(pagePaddingStr) || 20;
+    const topMm  = parseFloat(topOffsetStr)   || 0;
+    const padPx  = mm2px(padMm);
+    const topPx  = mm2px(topMm);
+    const extraPx = mm2px(extraBottomMm || 0);
+
+    // نطبّق نفس الـ padding المستخدم في الصفحات 3+
+    const content = document.createElement('div');
+    content.style.cssText = `
+      box-sizing:border-box; width:100%; height:100%;
+      padding:${padPx}px; padding-top:${padPx + topPx}px;
+      padding-bottom:${padPx + extraPx}px;
+    `;
+    page.appendChild(content);
+
+    if (includeTitle) {
+      const h2 = document.createElement('h2');
+      h2.style.cssText = `margin:8px 0; text-align:center; font-size:16px;`;
+      h2.textContent = title || '';
+      content.appendChild(h2);
+    }
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%; border-collapse:collapse; table-layout:fixed;';
+    const thead = document.createElement('thead');
+    const hr = document.createElement('tr');
+    headers.forEach(h => {
+      const th = document.createElement('th');
+      th.textContent = h ?? '';
+      th.style.cssText = 'border:1px solid #ccc; padding:6px; font-size:12px; word-break:break-word; white-space:pre-wrap;';
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr); table.appendChild(thead);
+    const tbody = document.createElement('tbody'); table.appendChild(tbody);
+    content.appendChild(table);
+    document.body.appendChild(page);
+
+    const safeHeight = page.clientHeight;
+    let fit = 0;
+    for (let r = 0; r < candidateRows.length; r++) {
+      const tr = document.createElement('tr');
+      candidateRows[r].forEach(cell => {
+        const td = document.createElement('td');
+        td.textContent = (cell ?? '').toString();
+        td.style.cssText = 'border:1px solid #ccc; padding:6px; font-size:12px; word-break:break-word; white-space:pre-wrap;';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+      if (page.scrollHeight > safeHeight) { tbody.removeChild(tr); break; } else { fit++; }
+    }
+    document.body.removeChild(page);
+    return fit;
+  }
+
+  function mm2px(mm){ return mm * (96 / 25.4); }
+
+  // تحويل أي وقت 24h داخل النص إلى 12h (ص/م) عند البناء
+  function convertTimesInText(text){
+    if (text == null) return text;
+    let s = String(text);
+    const hasAmPm = /\b(AM|PM|am|pm|ص|م)\b/.test(s);
+    const re = /(\b[01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?/g;
+    return s.replace(re, (full, hh, mm, ss) => {
+      if (hasAmPm) return full;
+      const h = parseInt(hh,10);
+      const period = (h < 12) ? 'ص' : 'م';
+      let h12 = h % 12; if (h12 === 0) h12 = 12;
+      return `${h12}:${mm}${ss ? ':'+ss : ''} ${period}`;
+    });
+  }
+
+  function buildTableHTML(values, className){
+    if (!values || !values.length) return '<p>لا توجد بيانات</p>';
+    const headers = values[0];
+    const cls = className ? ` class="${className}"` : '';
+    let h = `<table${cls}><thead><tr>` + headers.map(h => `<th>${h}</th>`).join('') + `</tr></thead><tbody>`;
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i] || [];
+      const rowPadded = Array.from({length: headers.length}, (_, j) => row[j] ?? '');
+      h += '<tr>' + rowPadded.map((cell) => {
+        let val = (cell == null || String(cell).trim() === '') ? '' : String(cell).trim();
+        if (!val) return `<td>-</td>`;
+        const shown = convertTimesInText(val);
+        return `<td>${shown}</td>`;
+      }).join('') + '</tr>';
+    }
+    h += '</tbody></table>';
+    return h;
+  }
+
+  /* ===================== طباعة ===================== */
+  function finalizePrintPages(){
+    const root = document.getElementById('printRoot');
+    const pages = Array.from(root.querySelectorAll('.print-page'));
+    if (pages.length) {
+      const last = pages[pages.length - 1];
+      last.style.breakAfter = 'auto';
+      last.style.pageBreakAfter = 'auto';
+    }
+    pages.forEach(p => {
+      const hasContent =
+        p.classList.contains('cover-page') ||
+        p.classList.contains('second-page') ||
+        p.querySelector('table, img, h1, h2, p, .page-content *');
+      if (!hasContent) p.remove();
+    });
+  }
+
+  // تحويل جدول الحضور التفاعلي إلى values للطباعة
+  function attendanceInputsToValues(){
+    const headers = ["الموظف","التاريخ","دخول","خروج","مجموع الساعات","الحالة"];
+    const rows = [];
+    document.querySelectorAll("#attendanceTable tbody tr").forEach(tr=>{
+      rows.push([
+        tr.querySelector(".emp-input")?.value || "",
+        tr.querySelector(".date-input")?.value || "",
+        tr.querySelector(".time-in")?.value || "",
+        tr.querySelector(".time-out")?.value || "",
+        tr.querySelector(".total-hours")?.value || "",
+        tr.querySelector(".status-select")?.value || ""
+      ]);
+    });
+    return [headers, ...rows];
+  }
+
+  function updatePagesFieldFromDOM(){
+    const root  = document.getElementById('printRoot');
+    const field = document.getElementById('pages');
+    const span  = document.getElementById('print_pages');
+    if (!root || !field) return;
+    const count = root.querySelectorAll('.print-page').length;
+    field.value = count;
+    if (span) span.textContent = count;
+  }
+
+  const printBtn = document.getElementById('printBtn');
+  if(printBtn){
+    printBtn.addEventListener('click', ()=>{
+      const attendanceValues = attendanceInputsToValues();
+      buildPrintPages(null, attendanceValues);
+      finalizePrintPages();
+      updatePagesFieldFromDOM();
+      syncPrintFields();
+      void document.body.offsetHeight;
+      window.print();
+    });
+  }
+
+  window.addEventListener('beforeprint', ()=>{
+    const attendanceValues = attendanceInputsToValues();
+    buildPrintPages(null, attendanceValues);
+    finalizePrintPages();
+    updatePagesFieldFromDOM();
+    syncPrintFields();
+    void document.body.offsetHeight;
+  });
+  </script>
+</body>
+</html>
